@@ -62,6 +62,15 @@ from qiskit.primitives import StatevectorSampler
 #-----------------
 from qiskit.primitives import BitArray
 
+#-------------------------------------
+# Import Fake provider for backend V2
+#-------------------------------------
+# from qiskit_ibm_runtime import fake_provider
+# https://quantum.cloud.ibm.com/docs/en/api/qiskit-ibm-runtime/fake-provider-fake-provider-for-backend-v2
+# https://github.com/Qiskit/qiskit-ibm-runtime/blob/stable/0.40/qiskit_ibm_runtime/fake_provider/fake_provider.py
+from qiskit_ibm_runtime.fake_provider import FakeProviderForBackendV2
+from qiskit_ibm_runtime.fake_provider import FakeTorino
+
 #-----------------------------------------------------------------------
 # Import from Qiskit Aer noise module (kept for optional fake backends)
 #-----------------------------------------------------------------------
