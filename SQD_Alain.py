@@ -83,7 +83,9 @@ from qiskit_aer.noise import (
     thermal_relaxation_error,
 )
 
+#-----------------------
 # Import qiskit classes
+#-----------------------
 from qiskit import QuantumCircuit, QuantumRegister
 from qiskit.transpiler.preset_passmanagers import generate_preset_pass_manager
 from qiskit.visualization import plot_gate_map
@@ -96,6 +98,9 @@ from qiskit_addon_sqd.counts import generate_bit_array_uniform, counts_to_arrays
 import ffsim
 from qiskit_ibm_runtime import QiskitRuntimeService, SamplerV2 as Sampler
 from qiskit_ibm_runtime import SamplerOptions
+
+# Import the function get_zigzag_physical_layout
+from zigzag import get_zigzag_physical_layout
 
 warnings.filterwarnings("ignore")
 
@@ -145,6 +150,7 @@ class SQD:
                  # Run options
                  #-------------
                  backend_name = None,                              # IBM cloud backend name
+                 job_id = None,                                    # job_id of a previously run job
                  do_plot_gate_map = True,                          # Whether to plot the gate map 
                  load_bit_array_file = None,                       # If provided, function step_3 will load samples from this file
                  save_bit_array_file = None,                       # If provided, function step_3 will save samples into this file
@@ -197,6 +203,10 @@ class SQD:
         #-------------------
         print("\nRun options")
         print("Backend name:", backend_name)
+        
+        if job_id != None:
+            print("job_id: ", job_id)
+        
         print("do plot gate map: ", do_plot_gate_map)
         
         if load_bit_array_file != None:
@@ -253,7 +263,12 @@ class SQD:
             "result_history": None,                          # result_history returned by post_process function
             "SQD_energy": None,                              # SQD energy returned by post_process function
             "Absolute_error": None,                          # Absolute error returned by post_process function
-            "do_plot_gate_map": do_plot_gate_map,            # Whether to plot the gate map  
+            #-------------------------------
+            # Layout set by setup_zig_zag()
+            #-------------------------------
+            "initial_layout": [],                            # Initial_layout
+            "spin_a_layout": [],                             # Spin a layout
+            "spin_b_layout": [],                             # Spin b layout
             #------------------------------------------
             # Files containing token (API key) and CRN
             #------------------------------------------
@@ -268,8 +283,8 @@ class SQD:
             # Run options
             #-------------
             "backend_name": backend_name,                    # IBM cloud backend name
-            "spin_a_layout": [],                             # Spin a layout set by __init__
-            "spin_b_layout": [],                             # Spin b layout set by __init__
+            "job_id": job_id,                                # job_id
+            "do_plot_gate_map": do_plot_gate_map,            # Whether to plot the gate map 
             "n_ancillary_qubits": n_ancillary_qubits,        # Number of ancillary qubits
             "run_on_QPU": run_on_QPU,                        # Whether to run the quantum circuit on the target hardware
             "nshots": nshots,                                # Number of shots
@@ -398,6 +413,7 @@ class SQD:
         
         backend_name = self.param['backend_name']
         n_qubits = self.param['n_qubits']
+        opt_level = self.param['opt_level']
         
         print("backend_name:", backend_name)
         
@@ -469,21 +485,16 @@ class SQD:
                 self.sampler = StatevectorSampler()
                 print("\nUsing AerSimulator with method statevector and noise model from", backend_name)
 
-            if not isinstance(self.backend, AerSimulator): 
-                print(f"Backend name: {self.backend.name}\n"
-                      f"Version: {self.backend.version}\n"
-                      f"Number of qubits: {self.backend.num_qubits}")
-        
+        #-------------------------------------------------------------------------------------------
+        # function step2() - Optimize problem for quantum execution generates a staged pass manager
+        #-------------------------------------------------------------------------------------------
         if isinstance(self.backend, AerSimulator):
             # Check that there is enough memory to perform a simulation with AerSimulator
             self.check_size()
-            
+                    
         else:
             # Setup the zig-zag pattern for qubit interactions
             self.setup_zig_zag()
-
-            # Plot gate map
-            self.plot_gate_map()
             
             print(f"Backend name: {self.backend.name}\n"
                   f"Version: {self.backend.version}\n"
@@ -491,29 +502,44 @@ class SQD:
                  )
 
     def setup_zig_zag(self):
-        #--------------------------------------------------
+        #---------------------------------------------------------------------------------------
         # Setup the zig-zag pattern for qubit interactions
-        #--------------------------------------------------
+        #
+        # Sample-based quantum diagonalization of a chemistry Hamiltonia
+        # https://quantum.cloud.ibm.com/docs/en/tutorials/sample-based-quantum-diagonalization
+        #
+        # Step 2: Optimize problem for quantum hardware execution
+        # def create_lucj_zigzag_layout()
+        # def get_zigzag_physical_layout()
+        # initial_layout, _ = get_zigzag_physical_layout(num_orbitals, backend=backend)
+        #---------------------------------------------------------------------------------------
         if isinstance(self.backend, AerSimulator):
             return
 
-        if self.backend.num_qubits == 127:
+        backend = self.backend
+        num_orbitals = self.param['num_orbitals']
+        
+        initial_layout, num_alpha_beta_qubits = get_zigzag_physical_layout(num_orbitals, backend=backend)
+        self.param['initial_layout'] = initial_layout
+        print("initial_layout:", initial_layout)
+        
+        if backend.num_qubits == 127:
             spin_a_layout = [0,14,18,19,20,33,39,40,41,53,60,61,62,72,81,82,83,92,102,103,104,111,122,123,124]
             spin_b_layout = [2,3,4,15,22,23,24,34,43,44,45,54,64,65,66,73,85,86,87,93,106,107,108,112,126]
         
-        elif self.backend.num_qubits == 133:
+        elif backend.num_qubits == 133:
             spin_a_layout = [2,3,4,16,23,24,25,35,44,45,46,55,65,66,67,74,86,87,88,94,107,108,109,113,128,127]
             spin_b_layout = [0,15,19,20,21,34,40,41,42,54,61,62,63,73,82,83,84,93,103,104,105,112,124,123,122,121]
+        
+        if backend.num_qubits in [127, 133]:
+        
+            self.param['spin_a_layout'] = spin_a_layout
+            self.param['spin_b_layout'] = spin_b_layout
+        
+            print("spin_a_layout: ", spin_a_layout)
+            print("spin_b_layout: ", spin_b_layout)
 
-        else:
-            spin_a_layout=[]
-            spin_b_layout=[]
-        
-        self.param['spin_a_layout'] = spin_a_layout
-        self.param['spin_b_layout'] = spin_b_layout
-        
-        print("spin_a_layout: ", spin_a_layout)
-        print("spin_b_layout: ", spin_b_layout)
+            self.plot_gate_map()
         
         return
 
@@ -530,7 +556,7 @@ class SQD:
         spin_a_layout = param['spin_a_layout']
         spin_b_layout = param['spin_b_layout']
         
-        if param['do_plot_gate_map']:
+        if param['do_plot_gate_map'] and spin_a_layout != []:
             try:
                 qubit_color = []
                 for i in range(self.backend.num_qubits):
@@ -809,38 +835,11 @@ class SQD:
         
         if not param['run_on_QPU']:
             return None
-
-        #------------------------
-        # Get backend parameters 
-        #------------------------
-        spin_a_layout = param['spin_a_layout']
-        spin_b_layout = param['spin_b_layout']
-
-        k = param['n_qubits'] // 2
         
-        OK = True
-        if k <= len(spin_a_layout):
-            spin_a_layout = spin_a_layout[:k]
-        else:
-            print("step_2 - provided spin_a_layout is too small")
-            OK = False
-
-        if k <= len(spin_b_layout):
-            spin_b_layout = spin_b_layout[:k]
-        else:
-            print("step_2 - provided spin_b_layout is too small")
-            OK = False
-
-        if OK:
-            initial_layout = spin_a_layout + spin_b_layout
-            #--------------------------------
-            # Generate a staged pass manager
-            #--------------------------------
-            print("Generating a staged pass manager with initial_layout = spin_a_layout + spin_b_layout")
-            pass_manager = generate_preset_pass_manager(optimization_level=3, backend=self.backend, initial_layout=initial_layout)
-        else:
-            print("Generating a staged pass manager with no initial_layout")
-            pass_manager = generate_preset_pass_manager(optimization_level=3, backend=self.backend)
+        #--------------------------------
+        # Generate a staged pass manager
+        #--------------------------------
+        pass_manager = generate_preset_pass_manager(optimization_level=3, backend=self.backend, initial_layout=param['initial_layout'])
 
         #-----------------------------------------------------------------------
         # Use the circuit generated by this pass manager for hardware execution
@@ -920,62 +919,91 @@ class SQD:
                 bit_array = BitArray.from_counts(counts)
             
             else:
-                #----------------------------------------------------
-                # Running the quantum circuit on the target hardware
-                #----------------------------------------------------
-                print("Running the quantum circuit on the target hardware: ", self.backend.name)
+                job_id = param["job_id"]
 
-                # Migrate from backend.run to Qiskit Runtime primitives
-                # https://docs.quantum.ibm.com/migration-guides/qiskit-runtime
-                job = self.sampler.run([isa_circuit], shots=param['nshots'])
-                print("\njob id:", job.job_id())
-
-                #-----------------------------------------------------------------------------
-                # Monitor job
-                # https://quantum.cloud.ibm.com/docs/en/api/qiskit/qiskit.providers.JobStatus
-                #-----------------------------------------------------------------------------
-                timeout = param['timeout']
-                poll_interval = param['poll_interval']
-
-                t0 = time.time()          # start time
-                t1 = t0                   # time when status is QUEUED
-
-                while True:
-                    try:
-                        status = job.status()
-                    except Exception as e:
-                        print(f"Error retrieving job status: {e}")
-                        time.sleep(poll_interval)
-                        continue
-
-                    if status == "QUEUED" and t1 == t0:
-                        t1 = time.time()
-                        print(f"Waiting qpu time = {t1 - t0:.2f}, status = {status}")
-
-                    elif status in ["VALIDATING", "RUNNING"]:
-                        print(f"status = {status}")
-
-                    elif status in ["CANCELLED", "DONE", "ERROR"]:
-                        t2 = time.time()
-                        print(f"Executing QPU time = {t2 - t1:.2f}, status = {status}")
-                        break
-
-                    if time.time() - t0 > timeout:
-                        print("Job monitoring timed out.")
-                        break
-
-                    time.sleep(poll_interval)
-
-                #--------------------------------
-                # Wait until the job is complete
-                #--------------------------------
-                try:
-                    result = job.result()
-                except Exception as e:
-                    print(f"Error retrieving job result: {e}")
+                if job_id is not None:
+                    print("job_id:", job_id)
+                    #-------------------------------
+                    # Retrieve the job using its ID
+                    #-------------------------------
+                    OK = True
                     result = None
+                    
+                    try:
+                        job = self.service.job(job_id)
+                    except Exception as e:
+                        print(f"Error retrieving job_id {job_id}: {e}")
+                        OK = False
 
-                if result is not None:
+                    if OK:
+                        try:
+                            result = job.result()
+                        except Exception as e:
+                            print(f"Error retrieving job result: {e}")
+                else:
+                    #----------------------------------------------------
+                    # Running the quantum circuit on the target hardware
+                    #----------------------------------------------------
+                    print("Running the quantum circuit on the target hardware: ", self.backend.name)
+
+                    # Migrate from backend.run to Qiskit Runtime primitives
+                    # https://docs.quantum.ibm.com/migration-guides/qiskit-runtime
+                    job = self.sampler.run([isa_circuit], shots=param['nshots'])
+                    print("\njob id:", job.job_id())
+
+                    #-----------------------------------------------------------------------------
+                    # Monitor job
+                    # https://quantum.cloud.ibm.com/docs/en/api/qiskit/qiskit.providers.JobStatus
+                    #-----------------------------------------------------------------------------
+                    timeout = param['timeout']
+                    poll_interval = param['poll_interval']
+
+                    t0 = time.time()          # start time
+                    t1 = t0                   # time when status is QUEUED
+
+                    while True:
+                        try:
+                            status = job.status()
+                        except Exception as e:
+                            print(f"Error retrieving job status: {e}")
+                            time.sleep(poll_interval)
+                            continue
+
+                        if status == "QUEUED" and t1 == t0:
+                            t1 = time.time()
+                            print(f"Waiting qpu time = {t1 - t0:.2f}, status = {status}")
+
+                        elif status in ["VALIDATING", "RUNNING"]:
+                            print(f"status = {status}")
+
+                        elif status in ["CANCELLED", "DONE", "ERROR"]:
+                            t2 = time.time()
+                            print(f"Executing QPU time = {t2 - t1:.2f}, status = {status}")
+                            break
+
+                        if time.time() - t0 > timeout:
+                            print("Job monitoring timed out.")
+                            break
+
+                        time.sleep(poll_interval)
+
+                    #--------------------------------
+                    # Wait until the job is complete
+                    #--------------------------------
+                    try:
+                        result = job.result()
+                    except Exception as e:
+                        print(f"Error retrieving job result: {e}")
+                        result = None
+
+                if result is None:
+                    print("\nThe job running the quantum circuit has failed")
+                    #---------------------------------------------------------------------------------------------
+                    # load a bit_array from a file or generate random samples drawn from the uniform distribution
+                    #---------------------------------------------------------------------------------------------
+                    bit_array = self.get_bit_array()
+
+                else:
                     # Get results for the first (and only) PUB
                     pub_result = result[0]
                                 
@@ -987,12 +1015,6 @@ class SQD:
                     # Get bit_array from counts
                     #---------------------------
                     bit_array = BitArray.from_counts(counts)
-                
-                else:
-                    #---------------------------------------------------------------------------------------------
-                    # load a bit_array from a file or generate random samples drawn from the uniform distribution
-                    #---------------------------------------------------------------------------------------------
-                    bit_array = self.get_bit_array()
                     
             #---------------------
             # Save bit array file

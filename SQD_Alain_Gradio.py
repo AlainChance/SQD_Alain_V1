@@ -95,10 +95,11 @@ def load_and_reset_config(config_filename):
     config = load_sqd_config(filename=config_filename)
     
     if config is None:
-        return gr.update(value="Invalid configuration."), None, None, None, None, None, None, None, None, None, None, None, None
+        return gr.update(value="Invalid configuration."), None, None, None, None, None, None, None, None, None, None, None, None, None
 
     # Extract values from config
     backend = config.get("backend_name", "None")
+    job_id = config.get("job_id", "None")                    # job_id of a previously run job
     do_plot = config.get("do_plot_gate_map", True)
     load_bit = config.get("load_bit_array_file", "None")
     save_bit = config.get("save_bit_array_file", "None")
@@ -115,6 +116,7 @@ def load_and_reset_config(config_filename):
     return (
         gr.update(value="Configuration loaded."),  # status
         gr.update(value=backend),
+        gr.update(value=job_id),                   # job_id of a previously run job
         gr.update(value=do_plot),
         gr.update(value=load_bit),
         gr.update(value=save_bit),
@@ -164,6 +166,7 @@ def list_json_files():
 def process_inputs(
     # Parameters in config dictionary
     backend_name,
+    job_id,                                    # job_id of a previously run job
     do_plot_gate_map,
     load_bit_array_file,
     save_bit_array_file,
@@ -181,9 +184,10 @@ def process_inputs(
 ): 
     config = {
         "backend_name": None if backend_name == "None" else backend_name,
+        "job_id": None if job_id in ["None", ""] else job_id,                                      # job_id of a previously run job
         "do_plot_gate_map": do_plot_gate_map,
-        "load_bit_array_file": None if load_bit_array_file == "None" else load_bit_array_file,
-        "save_bit_array_file": None if save_bit_array_file == "None" else save_bit_array_file,
+        "load_bit_array_file": None if load_bit_array_file in ["None", ""] else load_bit_array_file,
+        "save_bit_array_file": None if save_bit_array_file in ["None", ""] else save_bit_array_file,
         "n_ancillary_qubits": 0,
         "run_on_QPU": run_on_QPU,
         "nshots": 1000,
@@ -344,6 +348,8 @@ with gr.Blocks() as demo:
 
     with gr.Row():
         basis = gr.Textbox(label="Basis Set", value="6-31g")
+
+        job_id = gr.Textbox(label="Job id or 'None'", value='None') # job_id of a previously run job
         
         load_bit_array_file = gr.Textbox(
             label="Load bit array file name or 'None'",
@@ -395,8 +401,9 @@ with gr.Blocks() as demo:
         fn=load_and_reset_config,
         inputs=[config_filename],
         outputs=[
-            output,             # status textbox
+            output,                # status textbox
             backend_name,
+            job_id,                # job_id of a previously run job
             do_plot_gate_map,
             load_bit_array_file,
             save_bit_array_file,
@@ -416,6 +423,7 @@ with gr.Blocks() as demo:
         inputs=[
             # Parameters in config dictionary
             backend_name,
+            job_id,                # job_id of a previously run job
             do_plot_gate_map,
             load_bit_array_file,
             save_bit_array_file,
