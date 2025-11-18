@@ -267,8 +267,6 @@ class SQD:
             # Layout set by setup_zig_zag()
             #-------------------------------
             "initial_layout": [],                            # Initial_layout
-            "spin_a_layout": [],                             # Spin a layout
-            "spin_b_layout": [],                             # Spin b layout
             #------------------------------------------
             # Files containing token (API key) and CRN
             #------------------------------------------
@@ -522,24 +520,8 @@ class SQD:
         initial_layout, num_alpha_beta_qubits = get_zigzag_physical_layout(num_orbitals, backend=backend)
         self.param['initial_layout'] = initial_layout
         print("initial_layout:", initial_layout)
-        
-        if backend.num_qubits == 127:
-            spin_a_layout = [0,14,18,19,20,33,39,40,41,53,60,61,62,72,81,82,83,92,102,103,104,111,122,123,124]
-            spin_b_layout = [2,3,4,15,22,23,24,34,43,44,45,54,64,65,66,73,85,86,87,93,106,107,108,112,126]
-        
-        elif backend.num_qubits == 133:
-            spin_a_layout = [2,3,4,16,23,24,25,35,44,45,46,55,65,66,67,74,86,87,88,94,107,108,109,113,128,127]
-            spin_b_layout = [0,15,19,20,21,34,40,41,42,54,61,62,63,73,82,83,84,93,103,104,105,112,124,123,122,121]
-        
-        if backend.num_qubits in [127, 133]:
-        
-            self.param['spin_a_layout'] = spin_a_layout
-            self.param['spin_b_layout'] = spin_b_layout
-        
-            print("spin_a_layout: ", spin_a_layout)
-            print("spin_b_layout: ", spin_b_layout)
 
-            self.plot_gate_map()
+        self.plot_gate_map()
         
         return
 
@@ -552,22 +534,22 @@ class SQD:
         # sudo apt install graphviz
         #--------------------------------------------------------------------------------------------------
         param = self.param
-        
-        spin_a_layout = param['spin_a_layout']
-        spin_b_layout = param['spin_b_layout']
-        
-        if param['do_plot_gate_map'] and spin_a_layout != []:
+
+        if not param['do_plot_gate_map']:
+            return
+
+        initial_layout = param['initial_layout']
+
+        if initial_layout != []:
             try:
                 qubit_color = []
                 for i in range(self.backend.num_qubits):
-                    if i in spin_a_layout:
+                    if i in initial_layout:
                         qubit_color.append("#FFA07A") # light red
-                    elif i in spin_b_layout:
-                        qubit_color.append("#87CEEB") # sky blue
                     else:
                         qubit_color.append("#888888") # gray
                 
-                print("\nGate map for :", self.backend.name, ", the spin-a layout is shown in red, and the spin-b layout in blue.\n")
+                print("\nGate map for :", self.backend.name, ", the initial layout is shown in red\n")
                 
                 fig = plot_gate_map(self.backend, qubit_color=qubit_color, plot_directed=False)
                 
